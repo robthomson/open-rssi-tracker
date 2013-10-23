@@ -29,6 +29,7 @@ const int inputRight = A1;    //right rssi input
 const int inputMidFront = A3;  //front rssi input
 const int inputMidTop = A2;    //top rssi input
 const int outputServo = 10;    //pin of servo used for pan motion
+const float RSSIsmoothing = 0.0010;  // .0001 = max | 1 = 0ff
 
 int counter = 0;
 
@@ -58,10 +59,19 @@ void setup()
 
 void loop() {
 
-  int rssiLeft = analogRead(inputLeft) + inputLeftOffset ;
-  int rssiRight = analogRead(inputRight) + inputRightOffset ;
-  int rssiMidFront = analogRead(inputMidFront);
-  int rssiMidTop = analogRead(inputMidTop);
+  
+  float rssiLeftRough = analogRead(inputLeft) + inputLeftOffset ;
+  float rssiRightRough = analogRead(inputRight) + inputRightOffset ;
+  float rssiMidFrontRough = analogRead(inputMidFront);
+  float rssiMidTopRough = analogRead(inputMidTop);
+
+  int rssiLeft = smooth(rssiLeftRough, RSSIsmoothing, rssiLeft);  
+  int rssiRight = smooth(rssiRightRough, RSSIsmoothing, rssiRight);  
+  int rssiMidFront = smooth(rssiMidFrontRough, RSSIsmoothing, rssiMidFront); 
+  int rssiMidTop = smooth(rssiMidTopRough, RSSIsmoothing, rssiMidTop); 
+
+
+
 
   int raw_rssiDiff = rssiLeft > rssiRight ? rssiLeft - rssiRight : rssiRight - rssiLeft;
   float average_rssi = (rssiLeft + rssiRight ) / 2.f;
@@ -69,7 +79,15 @@ void loop() {
   const float K_rssi_ratio = 500.f; 
 
   int rssiDiff = (int)( (raw_rssiDiff * K_rssi_ratio) / average_rssi ) ;
-
+  
+  
+// Serial.println(rssiLeft);
+// Serial.println(rssiRight);
+// Serial.println(rssiMidFront);
+//  Serial.println(rssiMidTop);
+//  Serial.println(" ");
+ Serial.println(rssiDiff);
+  Serial.println(" ");
   /*
     ----------------------------------------------------------------------------- 
    TRACKING LOGIC
@@ -77,7 +95,7 @@ void loop() {
    */
 
 
-  if(rssiMidTop == 0 || rssiMidFront == 0){
+  if(rssiMidTop == 0 && rssiMidFront == 0){
     Serial.println("USB");
     servo.write(servocenter);  
     delay(2000);
@@ -93,13 +111,13 @@ void loop() {
     else {
       Serial.println("hold");
       servo.write(servocenter);
-      delay(1000);    
+      delay(10000);    
       hasSignal = 0;          
     } 
   } 
   else {  
-    hasSignal = 1;
-    speed = constrain(rssiDiff, 0, 20);  
+    hasSignal = 1; 
+    speed = rssiDiff;
     //track
     if(rssiLeft > rssiRight) { 
       Serial.println("move left");   
@@ -117,5 +135,20 @@ void loop() {
 
   }
   //end
+}
+
+int smooth(int data, float filterVal, float smoothedVal){
+
+
+  if (filterVal > 1){      // check to make sure param's are within range
+    filterVal = .99;
+  }
+  else if (filterVal <= 0){
+    filterVal = 0;
+  }
+
+  smoothedVal = (data * (1 - filterVal)) + (smoothedVal  *  filterVal);
+
+  return (int)smoothedVal;
 }
 
