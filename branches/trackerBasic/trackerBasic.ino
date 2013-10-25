@@ -32,7 +32,7 @@ const int inputMidFront = A3;  //front rssi input
 const int inputMidTop = A2;    //top rssi input
 const int buttonPin = 13;
 const int outputServo = 10;    //pin of servo used for pan motion
-const float smoothing = 5;  
+const float smoothing = 3;  
 
 int EEsize = 1024; // size in bytes of your board's EEPROM
 
@@ -139,8 +139,8 @@ void loop() {
    int rssiMidTop = rssiMidTopAvg;
    */
 
-  rssiLeft = analogRead(inputLeft);
-  rssiRight = analogRead(inputRight) ;
+  rssiLeft = analogRead(inputLeft) + offsetLeft;
+  rssiRight = analogRead(inputRight) + offsetRight;
   rssiMidFront = analogRead(inputMidFront); 
   rssiMidTop = analogRead(inputMidTop); 
 
@@ -187,10 +187,10 @@ void loop() {
       Serial.println("move right");  
       servo.write(servocenter -  speed);
     } 
-    else {
+    else if (rssiDiff < smoothing) {
       Serial.println("center");  
       servo.write(servocenter);
-      delay(2000);
+      //delay(2000);
     }  
   }
 
