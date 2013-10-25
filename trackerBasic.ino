@@ -32,15 +32,21 @@ const int inputMidFront = A3;  //front rssi input
 const int inputMidTop = A2;    //top rssi input
 const int buttonPin = 13;
 const int outputServo = 10;    //pin of servo used for pan motion
-const float smoothing = 5;  //
+const float smoothing = 5;  
 
 int EEsize = 1024; // size in bytes of your board's EEPROM
 
+/*
 float rssiLeftAvg = 0;
-float rssiRightAvg = 0;
-float rssiMidFrontAvg = 0;
-float rssiMidTopAvg = 0;
+ float rssiRightAvg = 0;
+ float rssiMidFrontAvg = 0;
+ float rssiMidTopAvg = 0;
+ */
 
+int rssiLeft;
+int rssiRight;
+int rssiMidTop;
+int rssiMidFront;
 
 const int servocenter = 90;  // absolute center. a 'home made' 360 will no doubt need a suitable value to be found.
 int speed = 0;
@@ -54,11 +60,13 @@ int buttonState = 0;
  */
 
 Servo servo;  // create servo object to control a servo
-MovingAvarageFilter rssiLeftAverageFilter(smoothing);
-MovingAvarageFilter rssiRightAverageFilter(smoothing);
-MovingAvarageFilter rssiMidTopAverageFilter(smoothing);
-MovingAvarageFilter rssiMidFrontAverageFilter(smoothing);
 
+/*
+MovingAvarageFilter rssiLeftAverageFilter(smoothing);
+ MovingAvarageFilter rssiRightAverageFilter(smoothing);
+ MovingAvarageFilter rssiMidTopAverageFilter(smoothing);
+ MovingAvarageFilter rssiMidFrontAverageFilter(smoothing);
+ */
 
 void setup()
 { 
@@ -81,12 +89,14 @@ void loop() {
     Serial.println("CALIBRATION MODE");
     servo.write(servocenter); 
 
-
+    /*
     rssiLeftAvg = rssiLeftAverageFilter.process(analogRead(inputLeft)); 
-    rssiRightAvg = rssiRightAverageFilter.process(analogRead(inputRight)); 
-    int rssiLeft = rssiLeftAvg;
-    int rssiRight = rssiRightAvg;
-
+     rssiRightAvg = rssiRightAverageFilter.process(analogRead(inputRight));     
+     int rssiLeft = rssiLeftAvg;
+     int rssiRight = rssiRightAvg;
+     */
+    rssiLeft = analogRead(inputLeft);
+    rssiRight = analogRead(inputRight) ;
 
     int diffRSSI = rssiLeft > rssiRight ? rssiLeft - rssiRight : rssiRight - rssiLeft;
 
@@ -114,23 +124,26 @@ void loop() {
     EEPROM.write(1,offsetLeft);
     EEPROM.write(2,offsetRight);
     inCalibration = 0; 
-    delay(5000);
+    delay(2000);
   }  
 
-
-
-  Serial.println("SEEK MODE");
-
-
+  /*
   rssiLeftAvg = rssiLeftAverageFilter.process(analogRead(inputLeft) + offsetLeft); 
-  rssiRightAvg = rssiRightAverageFilter.process(analogRead(inputRight) + offsetRight); 
-  rssiMidFrontAvg = rssiMidFrontAverageFilter.process(analogRead(inputMidFront) ); 
-  rssiMidTopAvg = rssiMidTopAverageFilter.process(analogRead(inputMidTop)); 
+   rssiRightAvg = rssiRightAverageFilter.process(analogRead(inputRight) + offsetRight); 
+   rssiMidFrontAvg = rssiMidFrontAverageFilter.process(analogRead(inputMidFront) ); 
+   rssiMidTopAvg = rssiMidTopAverageFilter.process(analogRead(inputMidTop)); 
+   
+   int rssiLeft = rssiLeftAvg;
+   int rssiRight = rssiRightAvg;
+   int rssiMidFront = rssiMidFrontAvg;
+   int rssiMidTop = rssiMidTopAvg;
+   */
 
-  int rssiLeft = rssiLeftAvg;
-  int rssiRight = rssiRightAvg;
-  int rssiMidFront = rssiMidFrontAvg;
-  int rssiMidTop = rssiMidTopAvg;
+  rssiLeft = analogRead(inputLeft);
+  rssiRight = analogRead(inputRight) ;
+  rssiMidFront = analogRead(inputMidFront); 
+  rssiMidTop = analogRead(inputMidTop); 
+
 
   int raw_rssiDiff = rssiLeft > rssiRight ? rssiLeft - rssiRight : rssiRight - rssiLeft;
   float average_rssi = (rssiLeft + rssiRight ) / 2.f;
@@ -138,12 +151,14 @@ void loop() {
   int rssiDiff = (int)( (raw_rssiDiff * K_rssi_ratio) / average_rssi ) ;
 
 
-
+  Serial.println(rssiLeft);
+  Serial.println(rssiRight);
+  Serial.println(rssiDiff);
   if(rssiMidTop == 0 && rssiMidFront == 0){
     Serial.println("USB");
     servo.write(servocenter); 
     delay(1000);
-  } 
+  }
   else if ((rssiLeft < 120 || rssiRight <120)){
     if(hasSignal == 0){
       Serial.println("seeking 360");  
@@ -161,7 +176,8 @@ void loop() {
   } 
   else {  
     hasSignal = 1; 
-    speed = rssiDiff;
+    speed = (rssiDiff/2);
+
     //track
     if(rssiLeft > rssiRight) { 
       Serial.println("move left");   
@@ -179,6 +195,7 @@ void loop() {
   }
 
 }
+
 
 
 
