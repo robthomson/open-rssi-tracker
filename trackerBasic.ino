@@ -24,7 +24,6 @@
 #include <Servo.h>
 #include <WProgram.h>
 #include <EEPROM.h>
-#include "MovingAvarageFilter.h"
 
 const int inputLeft = A0;     //left  rssi input
 const int inputRight = A1;    //right rssi input
@@ -32,16 +31,11 @@ const int inputMidFront = A3;  //front rssi input
 const int inputMidTop = A2;    //top rssi input
 const int buttonPin = 13;
 const int outputServo = 10;    //pin of servo used for pan motion
-const float smoothing = 3;  
+const int maxspeed = 40; // maximum speed of servo 
 
 int EEsize = 1024; // size in bytes of your board's EEPROM
 
-/*
-float rssiLeftAvg = 0;
- float rssiRightAvg = 0;
- float rssiMidFrontAvg = 0;
- float rssiMidTopAvg = 0;
- */
+
 
 int rssiLeft;
 int rssiRight;
@@ -54,28 +48,22 @@ int hasSignal = 0;
 int offsetLeft = 0;
 int offsetRight = 0;
 int buttonState = 0; 
-
+int smoothing = 6;
+int centerhold = 10;
+int lostlockhold = 5000;
 /*
   probably no need to edit below here.
  */
 
 Servo servo;  // create servo object to control a servo
 
-/*
-MovingAvarageFilter rssiLeftAverageFilter(smoothing);
- MovingAvarageFilter rssiRightAverageFilter(smoothing);
- MovingAvarageFilter rssiMidTopAverageFilter(smoothing);
- MovingAvarageFilter rssiMidFrontAverageFilter(smoothing);
- */
+
 
 void setup()
 { 
   Serial.begin(9600);
   servo.attach(outputServo);  
   pinMode(buttonPin, INPUT); 
-
-  int offsetLeft = EEPROM.read(1);
-  int offsetRight = EEPROM.read(2);
 }
 
 void loop() {
@@ -89,12 +77,6 @@ void loop() {
     Serial.println("CALIBRATION MODE");
     servo.write(servocenter); 
 
-    /*
-    rssiLeftAvg = rssiLeftAverageFilter.process(analogRead(inputLeft)); 
-     rssiRightAvg = rssiRightAverageFilter.process(analogRead(inputRight));     
-     int rssiLeft = rssiLeftAvg;
-     int rssiRight = rssiRightAvg;
-     */
     rssiLeft = analogRead(inputLeft);
     rssiRight = analogRead(inputRight) ;
 
@@ -112,12 +94,6 @@ void loop() {
 
     buttonState = digitalRead(buttonPin);
 
-    Serial.println(rssiLeft);
-    Serial.println(rssiRight);
-    Serial.println(diffRSSI);
-    Serial.println(offsetLeft);
-    Serial.println(offsetRight);  
-
   } 
   if(inCalibration == 1){
     Serial.println("Writing epprom....");
@@ -127,33 +103,20 @@ void loop() {
     delay(2000);
   }  
 
-  /*
-  rssiLeftAvg = rssiLeftAverageFilter.process(analogRead(inputLeft) + offsetLeft); 
-   rssiRightAvg = rssiRightAverageFilter.process(analogRead(inputRight) + offsetRight); 
-   rssiMidFrontAvg = rssiMidFrontAverageFilter.process(analogRead(inputMidFront) ); 
-   rssiMidTopAvg = rssiMidTopAverageFilter.process(analogRead(inputMidTop)); 
-   
-   int rssiLeft = rssiLeftAvg;
-   int rssiRight = rssiRightAvg;
-   int rssiMidFront = rssiMidFrontAvg;
-   int rssiMidTop = rssiMidTopAvg;
-   */
+
+  int offsetLeft = EEPROM.read(1);
+  int offsetRight = EEPROM.read(2);
 
   rssiLeft = analogRead(inputLeft) + offsetLeft;
   rssiRight = analogRead(inputRight) + offsetRight;
   rssiMidFront = analogRead(inputMidFront); 
   rssiMidTop = analogRead(inputMidTop); 
 
-
   int raw_rssiDiff = rssiLeft > rssiRight ? rssiLeft - rssiRight : rssiRight - rssiLeft;
   float average_rssi = (rssiLeft + rssiRight ) / 2.f;
   const float K_rssi_ratio = 500.f; 
   int rssiDiff = (int)( (raw_rssiDiff * K_rssi_ratio) / average_rssi ) ;
 
-
-  Serial.println(rssiLeft);
-  Serial.println(rssiRight);
-  Serial.println(rssiDiff);
   if(rssiMidTop == 0 && rssiMidFront == 0){
     Serial.println("USB");
     servo.write(servocenter); 
@@ -170,31 +133,76 @@ void loop() {
     else {
       Serial.println("hold");
       servo.write(servocenter);
-      delay(10000);    
+      delay(lostlockhold);    
       hasSignal = 0;          
     } 
   } 
   else {  
     hasSignal = 1; 
-    speed = (rssiDiff/2);
+
+    if(rssiDiff <= smoothing){
+      speed = 0;
+    } 
+    else if (rssiDiff <= smoothing + 1){
+      speed = 1 ;
+    } 
+    else if (rssiDiff <= smoothing + 2){
+      speed = 2 ;
+    } 
+    else if (rssiDiff <= smoothing + 4){
+      speed = 3 ;
+    } 
+    else if (rssiDiff <= smoothing + 6){
+      speed = 4 ;
+    } 
+    else if (rssiDiff <= smoothing + 8){
+      speed = 5 ;
+    } 
+    else if (rssiDiff <= smoothing + 10){
+      speed = 6 ;
+    } 
+    else if (rssiDiff <= smoothing + 12){
+      speed = 8 ;
+    } 
+    else if (rssiDiff <= smoothing + 14){
+      speed = 10 ;
+    }  
+    else if (rssiDiff <= smoothing + 16){
+      speed = 12 ;
+    }     
+    else if (rssiDiff <= smoothing + 18){
+      speed = 14 ;
+    }else if (rssiDiff <= smoothing + 20){
+      speed = 16 ;    
+    }else if (rssiDiff <= smoothing + 22){
+      speed = 18 ; 
+    }else if (rssiDiff <= smoothing + 24){
+      speed = 20 ;          
+    } else {
+      speed = maxspeed; 
+    }  
+
 
     //track
     if(rssiLeft > rssiRight) { 
-      Serial.println("move left");   
-      servo.write(servocenter +  speed);               
+      //Serial.println("move left");   
+      servo.write(servocenter +  speed);   
     }
     else if(rssiRight > rssiLeft) { 
-      Serial.println("move right");  
+      //Serial.println("move right");  
       servo.write(servocenter -  speed);
     } 
     else if (rssiDiff < smoothing) {
-      Serial.println("center");  
+      //Serial.println("center");  
       servo.write(servocenter);
-      //delay(2000);
+      delay(centerhold);
     }  
-  }
+  }     
+
+
 
 }
+
 
 
 
