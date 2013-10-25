@@ -23,14 +23,18 @@
 
 #include <Servo.h>
 #include <WProgram.h>
+#include <EEPROM.h>
 #include "MovingAvarageFilter.h"
 
 const int inputLeft = A0;     //left  rssi input
 const int inputRight = A1;    //right rssi input
 const int inputMidFront = A3;  //front rssi input
 const int inputMidTop = A2;    //top rssi input
+const int buttonPin = 13;
 const int outputServo = 10;    //pin of servo used for pan motion
 const float smoothing = 5;  //
+
+int EEsize = 1024; // size in bytes of your board's EEPROM
 
 float rssiLeftAvg = 0;
 float rssiRightAvg = 0;
@@ -41,9 +45,9 @@ float rssiMidTopAvg = 0;
 const int servocenter = 90;  // absolute center. a 'home made' 360 will no doubt need a suitable value to be found.
 int speed = 0;
 int hasSignal = 0;
-int offsetLeft = 10;
+int offsetLeft = 0;
 int offsetRight = 0;
-
+int buttonState = 0; 
 
 /*
   probably no need to edit below here.
@@ -60,19 +64,69 @@ void setup()
 { 
   Serial.begin(9600);
   servo.attach(outputServo);  
-  
+  pinMode(buttonPin, INPUT); 
+
+  int offsetLeft = EEPROM.read(1);
+  int offsetRight = EEPROM.read(2);
 }
 
 void loop() {
 
+  buttonState = digitalRead(buttonPin);
 
- 
-  
+  int inCalibration = 0;
+  while (buttonState == HIGH) { 
+    inCalibration = 1;
+
+    Serial.println("CALIBRATION MODE");
+    servo.write(servocenter); 
+
+
+    rssiLeftAvg = rssiLeftAverageFilter.process(analogRead(inputLeft)); 
+    rssiRightAvg = rssiRightAverageFilter.process(analogRead(inputRight)); 
+    int rssiLeft = rssiLeftAvg;
+    int rssiRight = rssiRightAvg;
+
+
+    int diffRSSI = rssiLeft > rssiRight ? rssiLeft - rssiRight : rssiRight - rssiLeft;
+
+    if(rssiLeft > rssiRight){
+      offsetLeft = 0;
+      offsetRight = diffRSSI;        
+
+    } 
+    else {
+      offsetLeft = diffRSSI;
+      offsetRight = 0; 
+    }  
+
+    buttonState = digitalRead(buttonPin);
+
+    Serial.println(rssiLeft);
+    Serial.println(rssiRight);
+    Serial.println(diffRSSI);
+    Serial.println(offsetLeft);
+    Serial.println(offsetRight);  
+
+  } 
+  if(inCalibration == 1){
+    Serial.println("Writing epprom....");
+    EEPROM.write(1,offsetLeft);
+    EEPROM.write(2,offsetRight);
+    inCalibration = 0; 
+    delay(5000);
+  }  
+
+
+
+  Serial.println("SEEK MODE");
+
+
   rssiLeftAvg = rssiLeftAverageFilter.process(analogRead(inputLeft) + offsetLeft); 
   rssiRightAvg = rssiRightAverageFilter.process(analogRead(inputRight) + offsetRight); 
   rssiMidFrontAvg = rssiMidFrontAverageFilter.process(analogRead(inputMidFront) ); 
   rssiMidTopAvg = rssiMidTopAverageFilter.process(analogRead(inputMidTop)); 
-  
+
   int rssiLeft = rssiLeftAvg;
   int rssiRight = rssiRightAvg;
   int rssiMidFront = rssiMidFrontAvg;
@@ -83,13 +137,14 @@ void loop() {
   const float K_rssi_ratio = 500.f; 
   int rssiDiff = (int)( (raw_rssiDiff * K_rssi_ratio) / average_rssi ) ;
 
- Serial.println(rssiDiff);
- Serial.println(" ");
+
 
   if(rssiMidTop == 0 && rssiMidFront == 0){
     Serial.println("USB");
     servo.write(servocenter); 
-  } else if ((rssiLeft < 120 || rssiRight <120)){
+    delay(1000);
+  } 
+  else if ((rssiLeft < 120 || rssiRight <120)){
     if(hasSignal == 0){
       Serial.println("seeking 360");  
       servo.write(servocenter +  20); 
@@ -121,7 +176,12 @@ void loop() {
       servo.write(servocenter);
       delay(2000);
     }  
+  }
+
 }
-}
+
+
+
+
 
 
