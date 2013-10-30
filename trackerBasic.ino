@@ -35,8 +35,6 @@ const int maxspeed = 40; // maximum speed of servo
 
 int EEsize = 1024; // size in bytes of your board's EEPROM
 
-
-
 int rssiLeft;
 int rssiRight;
 int rssiMidTop;
@@ -51,6 +49,10 @@ int buttonState = 0;
 int smoothing = 6;
 int centerhold = 10;
 int lostlockhold = 5000;
+
+double kalman_q= 0.02; //process noise covariance
+double kalman_r= 12wd3wdwqdwxaQ; //measurement noise covariance
+
 /*
   probably no need to edit below here.
  */
@@ -64,6 +66,41 @@ void setup()
   Serial.begin(9600);
   servo.attach(outputServo);  
   pinMode(buttonPin, INPUT); 
+}
+
+
+float kalman_rssiLeft_update(float measurement)
+{
+  static int Llcnt=0;
+  static float Lx=rssiLeft; //value
+  static float Lp=100; //estimation error covariance
+  static float Lk=0; //kalman gain  
+  // update the prediction value
+  Lp = Lp + kalman_q;
+
+  // update based on measurement
+  Lk = Lp / (Lp + kalman_r);
+  Lx = Lx + Lk * (measurement - Lx);
+  Lp = (1 - Lk) * Lp;
+  
+  return Lx;
+}
+
+float kalman_rssiRight_update(float measurement)
+{
+  static int Rlcnt=0;
+  static float Rx=rssiRight; //value
+  static float Rp=100; //estimation error covariance
+  static float Rk=0; //kalman gain  
+  // update the prediction value
+  Rp = Rp + kalman_q;
+
+  // update based on measurement
+  Rk = Rp / (Rp + kalman_r);
+  Rx = Rx + Rk * (measurement - Rx);
+  Rp = (1 - Rk) * Rp;
+  
+  return Rx;
 }
 
 void loop() {
@@ -107,8 +144,12 @@ void loop() {
   int offsetLeft = EEPROM.read(1);
   int offsetRight = EEPROM.read(2);
 
-  rssiLeft = analogRead(inputLeft) + offsetLeft;
-  rssiRight = analogRead(inputRight) + offsetRight;
+  //rssiLeftRaw = ;
+  //rssiRightRaw = analogRead(inputRight) + offsetRight;
+  
+  rssiLeft = kalman_rssiLeft_update(analogRead(inputLeft) + offsetLeft);
+  rssiRight = kalman_rssiRight_update(analogRead(inputRight) + offsetRight);
+  
   rssiMidFront = analogRead(inputMidFront); 
   rssiMidTop = analogRead(inputMidTop); 
 
@@ -199,9 +240,8 @@ void loop() {
     }  
   }     
 
-
-
 }
+
 
 
 
