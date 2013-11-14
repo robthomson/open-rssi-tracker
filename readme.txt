@@ -1,1 +1,0 @@
-Project code can be found in the branches folder of this repo.
