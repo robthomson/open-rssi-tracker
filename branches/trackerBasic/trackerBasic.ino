@@ -51,7 +51,7 @@ int centerhold = 10;
 int lostlockhold = 5000;
 
 double kalman_q= 0.02; //process noise covariance
-double kalman_r= 12wd3wdwqdwxaQ; //measurement noise covariance
+double kalman_r= 500; //measurement noise covariance
 
 /*
   probably no need to edit below here.
