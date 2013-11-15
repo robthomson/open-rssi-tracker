@@ -1,13 +1,6 @@
 /*
  * Authors 
  * - Rob Thomson <rob@marotori.com>
- 
- * This tracker code was built to replace the analog tracker created by IBCrazy on
- * http://www.rcgroups.com/forums/showthread.php?t=1337608
- * 
- * The arduino is a 90% drop in replacement for the board.   The only difference.
- * with this system, simply use a propoer 360 degree servo.  Do not do the actual
- * mod required for the analog system.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -25,20 +18,15 @@
 #include <WProgram.h>
 #include <EEPROM.h>
 
-
-const int servocenter = 90;
-
-
+//hardware
 const int inputLeft = A3;     //left  rssi input
 const int inputRight = A1;    //right rssi input
 const int inputUp= A2;     //left  rssi input
 const int inputDown = A0;    //right rssi input
-
 const int servoPanPin = 11;
 const int servoTiltPin = 12;
 
-int panSpeed = 1;
-
+//declare all variables
 int rssiLeft;
 int rssiRight;
 int rssiUp;
@@ -48,77 +36,202 @@ int calibrateRight = 0;
 int calibrateUp = 0;
 int calibrateDown = 0;
 int offsetLeft = 0;
-int offsetRight = 19;
-int offsetUp = 0;
-int offsetDown = 0;
+int offsetRight;
+int offsetUp;
+int offsetDown;
+int targetPos;
 
-int panPos = 0;
-int tiltPos = 0;
-
+//init servo objects
 Servo servoPan;  
 Servo servoTilt;  
 
-int i=0;
+//initial servo positions
+int panPos = 90;
+int tiltPos = 180;
+
+//max min pos
+int maxTilt = 20;
+
+//kalman filtering
+double kalman_q= 0.02; //process noise covariance
+double kalman_r= 500; //measurement noise covariance
 
 void setup()
 { 
   Serial.begin(9600);
   servoPan.attach(servoPanPin);  
   servoTilt.attach(servoTiltPin); 
-
-      
-     panPos = servocenter;
-     tiltPos = servocenter;
-  
-     servoTilt.write(servocenter + 90);  
-     servoPan.write(servocenter);    
-     
+  smoothTilt(180); 
+  smoothPan(90);  
 }
 
 void loop() {
+ 
+  rssiLeft = kalman_rssiLeft_update(analogRead(inputLeft) + offsetLeft);
+  rssiRight = kalman_rssiRight_update(analogRead(inputRight) + offsetRight);
+  rssiUp = kalman_rssiUp_update(analogRead(inputUp) + offsetUp);
+  rssiDown = kalman_rssiDown_update(analogRead(inputDown) + offsetDown);  
   
-    
-
-    rssiLeft = analogRead(inputLeft) + offsetLeft;
-    rssiRight = analogRead(inputRight) + offsetRight;
-    rssiUp = analogRead(inputUp) + offsetUp;
-    rssiDown = analogRead(inputDown) + offsetDown;  
-   
-    int rssiPanDiff = rssiLeft > rssiRight ? rssiLeft - rssiRight : rssiRight - rssiLeft;
-    int rssiTiltDiff = rssiUp > rssiDown ? rssiUp - rssiDown : rssiDown - rssiUp;
-
-
+  int rssiPanDiff = rssiLeft > rssiRight ? rssiLeft - rssiRight : rssiRight - rssiLeft;
+  int rssiTiltDiff = rssiUp > rssiDown ? rssiUp - rssiDown : rssiDown - rssiUp;
   
-    if(rssiPanDiff < 5){
-        servoPan.write(panPos);  
-    } else {      
-        if(rssiPanDiff < 10){
-              panSpeed = 1;
-        } else if(rssiPanDiff < 20 && rssiPanDiff >= 10){
-              panSpeed = 2;
-        } else if(rssiPanDiff < 30 && rssiPanDiff >= 20){
-              panSpeed = 3;
-        } else {
-              panSpeed = 4;
-        }  
-      
-      Serial.write(rssiPanDiff);
-      
-        if(rssiLeft > rssiRight){
-          panPos = panPos + panSpeed;
-        } else if(rssiLeft < rssiRight){
-          panPos = panPos - panSpeed;
-        } 
-        servoPan.write(panPos);  
-        delay(100);
-    }      
-      //Serial.println(panPos);
-
-
-      
-
   
-}  
+  //pan
+  if(rssiPanDiff < 5){
+    Serial.println('pan: centered');
+  } else if(rssiLeft > rssiRight){
+    Serial.println('pan: left');    
+    smoothPan(panPos + rssiPanDiff); 
+  } else if(rssiLeft < rssiRight){
+    Serial.println('pan: right');    
+    smoothPan(panPos - rssiPanDiff);    
+  }  
+  
+  //tilt
+  if(rssiTiltDiff < 5){
+    Serial.println('tilt: centered');
+  } else if(panPos <= maxTilt){
+     Serial.println('tilt: maximum');
+  } else if(rssiUp > rssiDown){
+    Serial.println('tilt: up');    
+    smoothTilt(panPos + rssiTiltDiff); 
+  } else if(rssiUp < rssiDown){
+    Serial.println('tilt: down');    
+    smoothTilt(panPos - rssiTiltDiff);    
+  }   
+  
+  
+}
+
+void smoothPan(int targetPos){
+  int currentPos = panPos;
+  int pos;
+  int step;
+  
+  if(currentPos < targetPos){
+      while(currentPos < targetPos){
+              int step = currentPos > targetPos ? currentPos - targetPos : targetPos - currentPos; //dynamic servo speed
+              if(step > 4){ step = 4; } //cap on end speed   
+              
+              currentPos = currentPos + step; //reset pointer
+              servoPan.write(step); //move the servo  
+              delay(15);         //delay to allow servo to get to position
+              
+      }  
+  } else if (targetPos < currentPos){
+      while(targetPos < currentPos){
+              int step = currentPos > targetPos ? currentPos - targetPos : targetPos - currentPos; //dynamic servo speed
+              if(step > 4){ step = 4; } //cap on end speed 
+              
+              currentPos = currentPos - step; //reset pointer
+              servoPan.write(step); //move the servo    
+              delay(15);         //delay to allow servo to get to position
+              
+      }        
+  } 
+  panPos = currentPos;
+}
+
+void smoothTilt(int targetPos){
+  int currentPos = panPos;
+  int pos;
+  int step;
+  
+  if(currentPos < targetPos){
+      while(currentPos < targetPos){
+              int step = currentPos > targetPos ? currentPos - targetPos : targetPos - currentPos; //dynamic servo speed
+              if(step > 4){ step = 4; } //cap on end speed   
+              
+              currentPos = currentPos + step; //reset pointer
+              servoTilt.write(step); //move the servo  
+              delay(15);         //delay to allow servo to get to position
+              
+      }  
+  } else if (targetPos < currentPos){
+      while(targetPos < currentPos){
+              int step = currentPos > targetPos ? currentPos - targetPos : targetPos - currentPos; //dynamic servo speed
+              if(step > 4){ step = 4; } //cap on end speed 
+              
+              currentPos = currentPos - step; //reset pointer
+              servoTilt.write(step); //move the servo    
+              delay(15);         //delay to allow servo to get to position
+              
+      }        
+  } 
+  panPos = currentPos;
+}
+
+
+float kalman_rssiLeft_update(float measurement)
+{
+  static int Llcnt=0;
+  static float Lx=rssiLeft; //value
+  static float Lp=100; //estimation error covariance
+  static float Lk=0; //kalman gain  
+  // update the prediction value
+  Lp = Lp + kalman_q;
+
+  // update based on measurement
+  Lk = Lp / (Lp + kalman_r);
+  Lx = Lx + Lk * (measurement - Lx);
+  Lp = (1 - Lk) * Lp;
+  
+  return Lx;
+}
+
+float kalman_rssiRight_update(float measurement)
+{
+  static int Rlcnt=0;
+  static float Rx=rssiRight; //value
+  static float Rp=100; //estimation error covariance
+  static float Rk=0; //kalman gain  
+  // update the prediction value
+  Rp = Rp + kalman_q;
+
+  // update based on measurement
+  Rk = Rp / (Rp + kalman_r);
+  Rx = Rx + Rk * (measurement - Rx);
+  Rp = (1 - Rk) * Rp;
+  
+  return Rx;
+}
+
+
+float kalman_rssiUp_update(float measurement)
+{
+  static int Ulcnt=0;
+  static float Ux=rssiUp; //value
+  static float Up=100; //estimation error covariance
+  static float Uk=0; //kalman gain  
+  // update the prediction value
+  Up = Up + kalman_q;
+
+  // update based on measurement
+  Uk = Up / (Up + kalman_r);
+  Ux = Ux + Uk * (measurement - Ux);
+  Up = (1 - Uk) * Up;
+  
+  return Ux;
+}
+
+
+float kalman_rssiDown_update(float measurement)
+{
+  static int Dlcnt=0;
+  static float Dx=rssiDown; //value
+  static float Dp=100; //estimation error covariance
+  static float Dk=0; //kalman gain  
+  // update the prediction value
+  Dp = Dp + kalman_q;
+
+  // update based on measurement
+  Dk = Dp / (Dp + kalman_r);
+  Dx = Dx + Dk * (measurement - Dx);
+  Dp = (1 - Dk) * Dp;
+  
+  return Dx;
+}
+
 
 
 
