@@ -40,6 +40,7 @@ int offsetRight;
 int offsetUp;
 int offsetDown;
 int targetPos;
+int maxspeed = 4;
 
 //init servo objects
 Servo servoPan;  
@@ -51,6 +52,12 @@ int tiltPos = 180;
 
 //max min pos
 int maxTilt = 20;
+int minTilt = 0;
+int maxPan = 180;
+int minPan = 0;
+int snapPoint = 50;
+
+
 
 //kalman filtering
 double kalman_q= 0.02; //process noise covariance
@@ -80,25 +87,57 @@ void loop() {
   if(rssiPanDiff < 5){
     Serial.println('pan: centered');
   } else if(rssiLeft > rssiRight){
-    Serial.println('pan: left');    
-    smoothPan(panPos + rssiPanDiff); 
+    Serial.println('pan: left');   
+    int x = panPos + rssiPanDiff;
+    if(x > maxPan){
+       x = maxPan; 
+    }  
+    smoothPan(x); 
   } else if(rssiLeft < rssiRight){
-    Serial.println('pan: right');    
-    smoothPan(panPos - rssiPanDiff);    
+    Serial.println('pan: right');   
+    int x = panPos - rssiPanDiff;
+    if(x > minPan){
+       x = minPan; 
+    }      
+    smoothPan(x);    
   }  
   
   //tilt
   if(rssiTiltDiff < 5){
     Serial.println('tilt: centered');
-  } else if(panPos <= maxTilt){
-     Serial.println('tilt: maximum');
   } else if(rssiUp > rssiDown){
     Serial.println('tilt: up');    
-    smoothTilt(panPos + rssiTiltDiff); 
+    int x = panPos + rssiTiltDiff;
+    if(x > maxTilt){
+       x = maxTilt; 
+    }      
+    smoothTilt(x); 
   } else if(rssiUp < rssiDown){
-    Serial.println('tilt: down');    
-    smoothTilt(panPos - rssiTiltDiff);    
-  }   
+    Serial.println('tilt: down'); 
+    int x = panPos - rssiTiltDiff;
+    if(x > minTilt){
+       x = minTilt; 
+    }      
+    smoothTilt(x);    
+  }  
+ 
+  //snapback
+  if(panPos >= maxPan){
+    if(rssiLeft > rssiRight && rssiPanDiff > snapPoint){
+      Serial.println('snap: left');   
+      int x = panPos / 2;
+      smoothPan(x); 
+    }
+  }
+  
+ if(panPos <= minPan){
+  if(rssiLeft < rssiRight && rssiPanDiff < snapPoint){
+    Serial.println('snap: right');   
+    int x = panPos * 2;  
+    smoothPan(x);    
+  }  
+ } 
+   
   
   
 }
@@ -107,11 +146,11 @@ void smoothPan(int targetPos){
   int currentPos = panPos;
   int pos;
   int step;
+
   
   if(currentPos < targetPos){
       while(currentPos < targetPos){
-              int step = currentPos > targetPos ? currentPos - targetPos : targetPos - currentPos; //dynamic servo speed
-              if(step > 4){ step = 4; } //cap on end speed   
+              int step = constrain(currentPos > targetPos ? currentPos - targetPos : targetPos - currentPos,0,maxspeed); //dynamic servo speed  
               
               currentPos = currentPos + step; //reset pointer
               servoPan.write(step); //move the servo  
@@ -120,8 +159,7 @@ void smoothPan(int targetPos){
       }  
   } else if (targetPos < currentPos){
       while(targetPos < currentPos){
-              int step = currentPos > targetPos ? currentPos - targetPos : targetPos - currentPos; //dynamic servo speed
-              if(step > 4){ step = 4; } //cap on end speed 
+              int step = constrain(currentPos > targetPos ? currentPos - targetPos : targetPos - currentPos,0,maxspeed); //dynamic servo speed
               
               currentPos = currentPos - step; //reset pointer
               servoPan.write(step); //move the servo    
@@ -139,8 +177,7 @@ void smoothTilt(int targetPos){
   
   if(currentPos < targetPos){
       while(currentPos < targetPos){
-              int step = currentPos > targetPos ? currentPos - targetPos : targetPos - currentPos; //dynamic servo speed
-              if(step > 4){ step = 4; } //cap on end speed   
+              int step = constrain(currentPos > targetPos ? currentPos - targetPos : targetPos - currentPos,0,maxspeed); //dynamic servo speed 
               
               currentPos = currentPos + step; //reset pointer
               servoTilt.write(step); //move the servo  
@@ -149,8 +186,8 @@ void smoothTilt(int targetPos){
       }  
   } else if (targetPos < currentPos){
       while(targetPos < currentPos){
-              int step = currentPos > targetPos ? currentPos - targetPos : targetPos - currentPos; //dynamic servo speed
-              if(step > 4){ step = 4; } //cap on end speed 
+              int step = constrain(currentPos > targetPos ? currentPos - targetPos : targetPos - currentPos,0,maxspeed); //dynamic servo speed
+              
               
               currentPos = currentPos - step; //reset pointer
               servoTilt.write(step); //move the servo    
