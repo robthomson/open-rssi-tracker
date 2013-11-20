@@ -36,8 +36,8 @@ int calibrateRight = 0;
 int calibrateUp = 0;
 int calibrateDown = 0;
 int offsetLeft = 0;
-int offsetRight = 30;
-int offsetUp = 14;
+int offsetRight = 0;
+int offsetUp = 0;
 int offsetDown = 0;
 int targetPos;
 int smoothing = 5;
@@ -55,7 +55,7 @@ int maxTilt = 180;
 int minTilt = 60;
 int maxPan = 180;
 int minPan = 0;
-int snapPoint = 2;
+int snapPoint = 5;
 int panSpeed;
 int tiltSpeed;
 int panStep = 1;
@@ -70,26 +70,26 @@ void setup()
   servoTilt.attach(servoTiltPin);   
   servoPan.write(panPos);   
   servoTilt.write(tiltPos);   
-  //calibrate();
+  calibrate();
   Serial.println("Tracking..");
 
 }
 
 void loop() {
 
-/*
+  /*
   Serial.println(offsetLeft);
-  Serial.println(offsetRight);
-  Serial.println(offsetUp);
-  Serial.println(offsetDown);
-  Serial.println("");
-  */
-  
+   Serial.println(offsetRight);
+   Serial.println(offsetUp);
+   Serial.println(offsetDown);
+   Serial.println("");
+   */
+
   rssiLeft = analogRead(inputLeft) + offsetLeft;
   rssiRight = analogRead(inputRight) + offsetRight;
   rssiUp = analogRead(inputUp) + offsetUp;
   rssiDown = analogRead(inputDown) + offsetDown;  
-  
+
   Serial.println(rssiLeft);
   Serial.println(rssiRight);
 
@@ -102,92 +102,68 @@ void loop() {
   float averageTilt_rssi = (rssiUp + rssiDown ) / 2.f;
   const float K_rssiTilt_ratio = 350.f; 
   int rssiTiltDiff= (int)( (raw_rssiTiltDiff * K_rssiTilt_ratio) / averageTilt_rssi ) ;
-  
+
   panPos = constrain(panPos,minPan,maxPan);
   tiltPos = constrain(tiltPos,minTilt,maxTilt);
 
   panSpeed = calcspeed(rssiPanDiff);
   tiltSpeed = calcspeed(rssiTiltDiff);
 
-   if(rssiLeft < 130 && rssiRight < 130){
-        //no lock do a sweep
-        int pos = 0;
-               for(pos = 0; pos < 180; pos += 1)  // goes from 0 degrees to 180 degrees 
-                {                                  // in steps of 1 degree 
-                  servoPan.write(pos);              // tell servo to go to position in variable 'pos' 
-                  delay(20);                       // waits 15ms for the servo to reach the position 
-                  
-                  if(rssiLeft >= 130 || rssiRight >= 130){
-                     break; 
-                  }  
-                  
-                } 
-                for(pos = 180; pos>=1; pos-=1)     // goes from 180 degrees to 0 degrees 
-                {                                
-                  servoPan.write(pos);              // tell servo to go to position in variable 'pos' 
-                  delay(20);                       // waits 15ms for the servo to reach the position 
-                  
-                  if(rssiLeft >= 130 || rssiRight >= 130){
-                     break; 
-                  }
-                  
-                }         
-     
-      
-   }  else {
+    //left right
+    if(rssiPanDiff <= smoothing){
+      Serial.println("center");
+      servoPan.write(panPos);
+    } 
+    else if(rssiLeft >= rssiRight){
+      Serial.println("move right");
+      panPos = panPos + panStep;
+      servoPan.write(panPos);
+      delay(panSpeed);      
+    } 
+    else if(rssiLeft <= rssiRight){
+      Serial.println("move left");
+      panPos = panPos - panStep;
+      servoPan.write(panPos);
+      delay(panSpeed);      
+    } 
+
+    //up down
+    if(rssiTiltDiff <= smoothing){
+      Serial.println("center");
+      servoTilt.write(tiltPos);
+    } 
+    else if(rssiUp >= rssiDown){
+      Serial.println("move up");
+      tiltPos = tiltPos + tiltStep;
+      servoTilt.write(tiltPos);
+      delay(tiltSpeed);      
+    } 
+    else if(rssiUp <= rssiDown){
+      Serial.println("move down");
+      tiltPos = tiltPos - tiltStep;
+      servoTilt.write(tiltPos);
+      delay(tiltSpeed);      
+    } 
+
+
+    //snap
+    if(panPos <= minPan + 5 ){
+      if(rssiRight > rssiLeft && rssiPanDiff >= snapPoint){
+        panPos = 160;                              
+        servoPan.write(panPos);              // tell servo to go to position in variable 'pos' 
+        delay(2000);                       // waits 15ms for the servo to reach the position         
+      }    
+    }  
+    if(panPos >= maxPan - 5 ){
+      if(rssiRight < rssiLeft && rssiPanDiff >= snapPoint){
+        panPos = 20;                              
+        servoPan.write(panPos);              // tell servo to go to position in variable 'pos' 
+        delay(2000);                       // waits 15ms for the servo to reach the position  
+      }      
+    }    
 
  
-        //left right
-        if(rssiPanDiff <= smoothing){
-          Serial.println("center");
-              servoPan.write(panPos);
-        } else if(rssiLeft >= rssiRight){
-              Serial.println("move right");
-              panPos = panPos + panStep;
-              servoPan.write(panPos);
-              delay(panSpeed);      
-        } else if(rssiLeft <= rssiRight){
-              Serial.println("move left");
-              panPos = panPos - panStep;
-              servoPan.write(panPos);
-              delay(panSpeed);      
-        } 
-      
-        //up down
-        if(rssiTiltDiff <= smoothing){
-              Serial.println("center");
-              servoTilt.write(tiltPos);
-        } else if(rssiUp >= rssiDown){
-              Serial.println("move up");
-              tiltPos = tiltPos + tiltStep;
-              servoTilt.write(tiltPos);
-              delay(tiltSpeed);      
-        } else if(rssiUp <= rssiDown){
-              Serial.println("move down");
-              tiltPos = tiltPos - tiltStep;
-              servoTilt.write(tiltPos);
-              delay(tiltSpeed);      
-        } 
 
-
-      //snap
-        if(panPos <= minPan + 5 ){
-            if(rssiRight > rssiLeft && rssiPanDiff >= snapPoint){
-                 panPos = 160;                              
-                 servoPan.write(panPos);              // tell servo to go to position in variable 'pos' 
-                 delay(2000);                       // waits 15ms for the servo to reach the position         
-            }    
-        }  
-        if(panPos >= maxPan - 5 ){
-          if(rssiRight < rssiLeft && rssiPanDiff >= snapPoint){
-                 panPos = 20;                              
-                 servoPan.write(panPos);              // tell servo to go to position in variable 'pos' 
-                 delay(2000);                       // waits 15ms for the servo to reach the position  
-          }      
-        }    
-        
-   }
-  
 
 }
 
@@ -240,27 +216,29 @@ void calibrate(){
 int calcspeed(int rssiDiff){
   int speed;
   if(rssiDiff <= smoothing){
-      speed = 0;
-    } 
-    else if (rssiDiff <= smoothing + 1){
-      speed = 200 ;
-    } 
-    else if (rssiDiff <= smoothing + 2){
-      speed = 150 ;
-    } 
-    else if (rssiDiff <= smoothing + 4){
-      speed =  100;
-    } 
-    else if (rssiDiff <= smoothing + 6){
-      speed = 50 ;
-    } 
-    else if (rssiDiff <= smoothing + 8){
-      speed = 30 ;         
-    } else {
-      speed = 10; 
-    } 
-   return speed; 
+    speed = 0;
+  } 
+  else if (rssiDiff <= smoothing + 1){
+    speed = 200 ;
+  } 
+  else if (rssiDiff <= smoothing + 2){
+    speed = 150 ;
+  } 
+  else if (rssiDiff <= smoothing + 4){
+    speed =  100;
+  } 
+  else if (rssiDiff <= smoothing + 6){
+    speed = 50 ;
+  } 
+  else if (rssiDiff <= smoothing + 8){
+    speed = 30 ;         
+  } 
+  else {
+    speed = 10; 
+  } 
+  return speed; 
 }  
+
 
 
 
