@@ -40,7 +40,7 @@ int offsetRight = 0;
 int offsetUp = 0;
 int offsetDown = 0;
 int targetPos;
-int smoothing = 5;
+int smoothing = 10;
 
 //init servo objects
 Servo servoPan;  
@@ -70,6 +70,7 @@ void setup()
   servoTilt.attach(servoTiltPin);   
   servoPan.write(panPos);   
   servoTilt.write(tiltPos);   
+  delay(5000);
   calibrate();
   Serial.println("Tracking..");
 
@@ -95,12 +96,12 @@ void loop() {
 
   int raw_rssiPanDiff = rssiLeft > rssiRight ? rssiLeft - rssiRight : rssiRight - rssiLeft;
   float averagePan_rssi = (rssiLeft + rssiRight ) / 2.f;
-  const float K_rssiPan_ratio = 350.f; 
+  const float K_rssiPan_ratio = 400.f; 
   int rssiPanDiff= (int)( (raw_rssiPanDiff * K_rssiPan_ratio) / averagePan_rssi ) ;
 
   int raw_rssiTiltDiff = rssiUp > rssiDown ? rssiUp - rssiDown : rssiDown - rssiUp;
   float averageTilt_rssi = (rssiUp + rssiDown ) / 2.f;
-  const float K_rssiTilt_ratio = 350.f; 
+  const float K_rssiTilt_ratio = 400.f; 
   int rssiTiltDiff= (int)( (raw_rssiTiltDiff * K_rssiTilt_ratio) / averageTilt_rssi ) ;
 
   panPos = constrain(panPos,minPan,maxPan);
@@ -209,6 +210,8 @@ void calibrate(){
     offsetDown = 0; 
   }    
 
+
+  
 
 }  
 
